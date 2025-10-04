@@ -4,14 +4,10 @@ import os
 from passlib.context import CryptContext
 
 # Password hashing
-# pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 
-# Database connection string from Render
-DATABASE_URL = os.getenv(
-    "DATABASE_URL", 
-    "postgresql://coding_challenge_platform_user:lMxyQpBH4d5hRZhVdlpktt23WUOaIYfJ@dpg-d3fvlah5pdvs73c092hg-a.oregon-postgres.render.com/coding_challenge_platform"
-)
+# Database connection string will be provided by Railway environment variables
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 def get_db_connection():
     """Get database connection"""
@@ -48,7 +44,7 @@ def create_user(username: str, email: str, password: str):
     
     try:
         # Truncate password to 72 bytes for bcrypt
-        # bcrypt has a 72 byte limit
+        # argon2 handles long passwords, but the truncation is a safeguard.
         password_bytes = password.encode('utf-8')
         if len(password_bytes) > 72:
             print(f"[DEBUG] Password too long ({len(password_bytes)} bytes), truncating to 72 bytes")
@@ -62,7 +58,7 @@ def create_user(username: str, email: str, password: str):
                 except UnicodeDecodeError:
                     truncated_bytes = truncated_bytes[:-1]
             print(f"[DEBUG] Truncated password length: {len(password)} chars, {len(password.encode('utf-8'))} bytes")
-        
+    
         print(f"[DEBUG] Hashing password...")
         hashed_password = pwd_context.hash(password)
         print(f"[DEBUG] Password hashed successfully")
