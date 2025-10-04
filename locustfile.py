@@ -4,8 +4,7 @@ import random
 # This is a base class that knows how to make requests to the host
 class WebsiteUser(HttpUser):
     # This URL should be your deployed Railway app URL
-    host = "https://web-production-92e6.up.railway.app"
-    
+    host = "https://web-production-f7c0c.up.railway.app"    
     # Wait time between tasks: simulate users thinking for 1 to 5 seconds
     wait_time = between(1, 5)
 

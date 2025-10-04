@@ -7,9 +7,9 @@ def generate_report():
     """Reads Locust CSV output and generates a clean report."""
     
     # Find the latest stats file created by Locust
-    list_of_files = glob.glob('load_test_report_core_stats.csv') 
+    list_of_files = glob.glob('load_test_report_90_users_stats.csv') 
     if not list_of_files:
-        print(f"Error: No stats file found. Please run the load test first.")
+        print(f"Error: No stats file found. Please run the load test again.")
         return
     
     report_file = max(list_of_files, key=os.path.getmtime)
@@ -37,7 +37,6 @@ def generate_report():
     with open(summary_file, 'w') as f:
         f.write(f"--- Load Test Summary Report ({os.path.basename(report_file)}) ---\n\n")
         
-        # Using current time for the timestamp
         current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(os.path.getmtime(report_file)))
         f.write(f"Timestamp: {current_time}\n")
         
