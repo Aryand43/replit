@@ -18,14 +18,13 @@ try:
 except ImportError as e:
     DATABASE_AVAILABLE = False
     print(f"⚠ Warning: Database module not available - {e}")
-    print("⚠ Authentication will not work. Install dependencies: pip install psycopg2-binary passlib[bcrypt]")
+    print("⚠ Authentication will not work.")
 
 from grader import grade_submission
 
 app = FastAPI()
 
 # CRITICAL: Add CORS middleware FIRST, before any routes.
-# This allows the frontend to make requests to the backend.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # Allow all origins for development/deployment
@@ -37,7 +36,6 @@ app.add_middleware(
 print("✓ CORS middleware configured")
 
 # Load existing submissions from a JSON file.
-# This acts as a simple database for the leaderboard.
 leaderboard_file = "leaderboard.json"
 if os.path.exists(leaderboard_file):
     with open(leaderboard_file, "r") as f:
@@ -46,7 +44,6 @@ else:
     submissions = []
 
 # Initialize the database on application startup.
-# This will create the 'users' table if it doesn't exist.
 @app.on_event("startup")
 async def startup():
     print("🚀 Starting server...")
@@ -89,36 +86,27 @@ async def root_api():
 @app.post("/api/signup")
 async def signup_api(request: SignupRequest):
     """User signup endpoint."""
-    print(f"📝 Signup request received for username: {request.username}")
     if not DATABASE_AVAILABLE:
-        raise HTTPException(
-            status_code=503, 
-            detail="Database service unavailable."
-        )
+        raise HTTPException(status_code=503, detail="Database service unavailable.")
     try:
         result = create_user(request.username, request.email, request.password)
         if not result["success"]:
             raise HTTPException(status_code=400, detail=result["error"])
-        print(f"✓ Signup successful for user: {request.username}")
         return result
     except Exception as e:
-        print(f"✗ Signup error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/login")
 async def login_api(request: LoginRequest):
     """User login endpoint."""
-    print(f"🔐 Login request received for username: {request.username}")
     if not DATABASE_AVAILABLE:
         raise HTTPException(status_code=503, detail="Database service unavailable")
     try:
         result = verify_user(request.username, request.password)
         if not result["success"]:
             raise HTTPException(status_code=401, detail=result["error"])
-        print(f"✓ Login successful for user: {request.username}")
         return result
     except Exception as e:
-        print(f"✗ Login error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/problems")

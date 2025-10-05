@@ -7,7 +7,7 @@ def generate_report():
     """Reads Locust CSV output and generates a clean report."""
     
     # Find the latest stats file created by Locust
-    list_of_files = glob.glob('load_test_report_90_users_stats.csv') 
+    list_of_files = glob.glob('final_load_test_report_stats.csv')
     if not list_of_files:
         print(f"Error: No stats file found. Please run the load test again.")
         return

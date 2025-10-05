@@ -1,64 +1,115 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Login - Code Challenge Platform</title>
-    <link rel="stylesheet" href="challenge.css" />
-  </head>
-  <body>
-    <div class="main-container" style="max-width: 500px; margin: 4rem auto">
-      <div class="section">
-        <h2 style="text-align: center">🔐 Login / Signup</h2>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Login/Signup - Code Challenge Platform</title>
+    <link rel="stylesheet" href="challenge.css" />
+    <style>
+      .auth-container {
+        max-width: 450px;
+        margin: 6rem auto;
+        padding: 2rem;
+      }
+      .auth-container h2 {
+        background: linear-gradient(135deg, #4f46e5, #7c3aed, #db2777);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        font-size: 1.8rem;
+        font-weight: 800;
+        text-align: center;
+        margin-bottom: 2.5rem;
+      }
+      .link-toggle {
+        color: #6366f1;
+        cursor: pointer;
+        transition: color 0.3s ease;
+      }
+      .link-toggle:hover {
+        color: #4338ca;
+      }
+      .hidden {
+        display: none;
+      }
+      body.dark .auth-container h2 {
+        background: linear-gradient(135deg, #818cf8, #a78bfa, #f472b6);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+      body.dark .link-toggle {
+        color: #a78bfa;
+      }
+      body.dark .link-toggle:hover {
+        color: #818cf8;
+      }
+      .form-actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 1.5rem;
+      }
+      .form-actions .submit-btn {
+        flex-grow: 1;
+      }
+      .form-actions p {
+        margin: 0;
+        font-size: 0.9rem;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="section auth-container">
+      <h2>🔐 Code Challenge Platform</h2>
 
-        <div id="loginForm">
-          <div class="form-group">
-            <label for="loginUsername">Username:</label>
-            <input type="text" id="loginUsername" required />
-          </div>
-          <div class="form-group">
-            <label for="loginPassword">Password:</label>
-            <input type="password" id="loginPassword" required />
-          </div>
-          <button id="loginBtn" class="submit-btn" style="width: 100%">
-            Login
-          </button>
-          <p style="text-align: center; margin-top: 1rem">
-            Don't have an account?
-            <a href="#" id="showSignup" style="color: #6366f1">Sign up</a>
-          </p>
-        </div>
+      <div id="loginForm">
+        <div class="form-group">
+          <label for="loginUsername">Username:</label>
+          <input type="text" id="loginUsername" required />
+        </div>
+        <div class="form-group">
+          <label for="loginPassword">Password:</label>
+          <input type="password" id="loginPassword" required />
+        </div>
+        <button id="loginBtn" class="submit-btn" style="width: 100%">
+          Login
+        </button>
+        <p style="text-align: center; margin-top: 1.5rem">
+          Don't have an account?
+          <a href="#" id="showSignup" class="link-toggle">Sign up</a>
+        </p>
+      </div>
 
-        <div id="signupForm" class="hidden">
-          <div class="form-group">
-            <label for="signupUsername">Username:</label>
-            <input type="text" id="signupUsername" required />
-          </div>
-          <div class="form-group">
-            <label for="signupEmail">Email:</label>
-            <input type="email" id="signupEmail" required />
-          </div>
-          <div class="form-group">
-            <label for="signupPassword">Password:</label>
-            <input
-              type="password"
-              id="signupPassword"
-              maxlength="72"
-              required
-            />
-            <small style="color: #666">Maximum 72 characters</small>
-          </div>
-          <button id="signupBtn" class="submit-btn" style="width: 100%">
-            Sign Up
-          </button>
-          <p style="text-align: center; margin-top: 1rem">
-            Already have an account?
-            <a href="#" id="showLogin" style="color: #6366f1">Login</a>
-          </p>
-        </div>
-      </div>
-    </div>
+      <div id="signupForm" class="hidden">
+        <div class="form-group">
+          <label for="signupUsername">Username:</label>
+          <input type="text" id="signupUsername" required />
+        </div>
+        <div class="form-group">
+          <label for="signupEmail">Email:</label>
+          <input type="email" id="signupEmail" required />
+        </div>
+        <div class="form-group">
+          <label for="signupPassword">Password:</label>
+          <input
+            type="password"
+            id="signupPassword"
+            maxlength="72"
+            required
+          />
+          <small style="color: #666">Maximum 72 characters</small>
+        </div>
+        <button id="signupBtn" class="submit-btn" style="width: 100%">
+          Sign Up
+        </button>
+        <p style="text-align: center; margin-top: 1.5rem">
+          Already have an account?
+          <a href="#" id="showLogin" class="link-toggle">Login</a>
+        </p>
+      </div>
+    </div>
 
-    <script src="auth.js"></script>
-  </body>
+    <script src="auth.js"></script>
+  </body>
 </html>
