@@ -38,7 +38,12 @@ document.getElementById("loginBtn").addEventListener("click", async () => {
   const password = document.getElementById("loginPassword").value;
 
   try {
-    const response = await fetch(`${API_BASE}/login`, {
+    // const response = await fetch(`${API_BASE}/login`, {
+    //   method: "POST",
+    //   headers: { "Content-Type": "application/json" },
+    //   body: JSON.stringify({ username, password }),
+    // });
+    const response = await fetch(`${API_BASE}/api/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password }),
@@ -72,7 +77,13 @@ document.getElementById("signupBtn").addEventListener("click", async () => {
   }
 
   try {
-    const response = await fetch(`${API_BASE}/signup`, {
+    // const response = await fetch(`${API_BASE}/signup`, {
+    //   method: "POST",
+    //   headers: { "Content-Type": "application/json" },
+    //   body: JSON.stringify({ username, email, password }),
+    // });
+
+    const response = await fetch(`${API_BASE}/api/signup`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, email, password }),

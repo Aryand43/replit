@@ -2,6 +2,7 @@
 let currentProblems = [];
 let currentUser = "";
 let currentProblem = "";
+let codeEditor; // CodeMirror instance
 // const API_BASE =
 //   window.location.hostname === "localhost" ? "http://127.0.0.1:8000" : "/api";
 // At the top of challenge.js, replace the API_BASE line with:
@@ -29,7 +30,7 @@ const elements = {
   problemDescription: document.getElementById("problemDescription"),
   problemDetails: document.getElementById("problemDetails"),
   sampleTests: document.getElementById("sampleTests"),
-  codeEditor: document.getElementById("codeEditor"),
+  codeEditorTextarea: document.getElementById("codeEditor"),
   submitBtn: document.getElementById("submitBtn"),
   runBtn: document.getElementById("runBtn"),
   resultsSection: document.getElementById("resultsSection"),
@@ -52,12 +53,319 @@ if (!userData) {
   window.location.href = "auth.html";
 }
 
+// Initialize CodeMirror
+function initializeCodeEditor() {
+  const textarea = document.getElementById("codeEditor");
+
+  codeEditor = CodeMirror.fromTextArea(textarea, {
+    // Basic settings
+    mode: "python",
+    theme: document.body.classList.contains("dark") ? "monokai" : "default",
+
+    // Editor features
+    lineNumbers: true,
+    indentUnit: 4,
+    indentWithTabs: false,
+    smartIndent: true,
+    autoCloseBrackets: true,
+    matchBrackets: true,
+    lineWrapping: true,
+
+    // Linting configuration
+    gutters: ["CodeMirror-lint-markers"],
+    lint: {
+      getAnnotations: pythonLinter,
+      async: false, // Changed to false for immediate feedback
+      delay: 500, // Wait 500ms after typing stops
+    },
+
+    // Extra key bindings
+    extraKeys: {
+      Enter: handleEnterKey,
+      Tab: handleTabKey,
+      "Shift-Tab": handleShiftTabKey,
+      "Ctrl-/": handleCommentToggle, // Bonus: toggle comments
+    },
+  });
+
+  // Set initial value
+  codeEditor.setValue(`# Write your Python solution here
+def solve():
+    # Your code goes here
+    pass`);
+
+  // Listen for changes to validate form
+  codeEditor.on("change", () => {
+    validateForm();
+  });
+
+  console.log("CodeMirror initialized successfully");
+}
+
+// Python Linter - checks for basic syntax errors
+function pythonLinter(text) {
+  const errors = [];
+  const lines = text.split("\n");
+  const indentStack = [0]; // Track indentation levels
+
+  lines.forEach((line, lineNum) => {
+    const trimmed = line.trim();
+
+    // Skip empty lines and comments
+    if (!trimmed || trimmed.startsWith("#")) {
+      return;
+    }
+
+    // ===== ERROR 1: Unclosed brackets/parentheses/braces =====
+    const openCount = (line.match(/[\(\[\{]/g) || []).length;
+    const closeCount = (line.match(/[\)\]\}]/g) || []).length;
+
+    if (openCount > closeCount) {
+      errors.push({
+        from: CodeMirror.Pos(
+          lineNum,
+          line.indexOf("(") !== -1 ? line.indexOf("(") : 0
+        ),
+        to: CodeMirror.Pos(lineNum, line.length),
+        message: "Unclosed bracket, parenthesis, or brace",
+        severity: "error",
+      });
+    }
+
+    // ===== ERROR 2: Missing colon after def, if, else, etc. =====
+    const colonKeywords =
+      /^(def|if|elif|else|for|while|try|except|finally|class|with)\s+/;
+    const hasColon = line.includes(":");
+
+    if (colonKeywords.test(trimmed) && !hasColon) {
+      errors.push({
+        from: CodeMirror.Pos(lineNum, 0),
+        to: CodeMirror.Pos(lineNum, line.length),
+        message: `Missing colon (:) at the end of ${
+          trimmed.split(/\s+/)[0]
+        } statement`,
+        severity: "error",
+      });
+    }
+
+    // ===== ERROR 3: Invalid indentation =====
+    const currentIndent = line.search(/\S/);
+    if (currentIndent !== -1 && currentIndent % 4 !== 0) {
+      errors.push({
+        from: CodeMirror.Pos(lineNum, 0),
+        to: CodeMirror.Pos(lineNum, currentIndent),
+        message: "Indentation should be a multiple of 4 spaces",
+        severity: "warning",
+      });
+    }
+
+    // ===== ERROR 4: Common typos =====
+    const typos = {
+      prnt: "print",
+      retrun: "return",
+      eslif: "elif",
+      esle: "else",
+      dfe: "def",
+      improt: "import",
+      form: "from",
+    };
+
+    Object.keys(typos).forEach((typo) => {
+      const regex = new RegExp(`\\b${typo}\\b`, "g");
+      let match;
+      while ((match = regex.exec(line)) !== null) {
+        errors.push({
+          from: CodeMirror.Pos(lineNum, match.index),
+          to: CodeMirror.Pos(lineNum, match.index + typo.length),
+          message: `Did you mean '${typos[typo]}'?`,
+          severity: "error",
+        });
+      }
+    });
+
+    // ===== ERROR 5: Assignment in conditions =====
+    if (/^(if|while|elif)\s+.*[^=!<>]=[^=]/.test(trimmed)) {
+      const assignIndex = line.indexOf("=");
+      errors.push({
+        from: CodeMirror.Pos(lineNum, assignIndex),
+        to: CodeMirror.Pos(lineNum, assignIndex + 1),
+        message: "Use '==' for comparison, not '=' (assignment)",
+        severity: "warning",
+      });
+    }
+
+    // ===== ERROR 6: Multiple statements on one line =====
+    if ((trimmed.match(/;/g) || []).length > 0) {
+      errors.push({
+        from: CodeMirror.Pos(lineNum, line.indexOf(";")),
+        to: CodeMirror.Pos(lineNum, line.indexOf(";") + 1),
+        message: "Avoid multiple statements on one line (PEP 8)",
+        severity: "warning",
+      });
+    }
+
+    // ===== ERROR 7: Missing whitespace around operators =====
+    if (/\w+[+\-*/%]=\w+/.test(trimmed) && !trimmed.includes("==")) {
+      errors.push({
+        from: CodeMirror.Pos(lineNum, 0),
+        to: CodeMirror.Pos(lineNum, line.length),
+        message: "Missing whitespace around operator (PEP 8)",
+        severity: "info",
+      });
+    }
+  });
+
+  return errors;
+}
+
+// Handle Enter key for smart indentation
+function handleEnterKey(cm) {
+  const cursor = cm.getCursor();
+  const line = cm.getLine(cursor.line);
+  const trimmed = line.trim();
+
+  // Get current indentation
+  const currentIndent = line.search(/\S/);
+  const indent = currentIndent === -1 ? "" : line.substring(0, currentIndent);
+
+  // Insert newline
+  cm.replaceSelection("\n", "end");
+
+  // Determine new indentation
+  let newIndent = indent;
+
+  // If line ends with colon, increase indentation
+  if (trimmed.endsWith(":")) {
+    newIndent = indent + "    ";
+  }
+  // If line is 'pass', 'break', 'continue', 'return', decrease next indent
+  else if (/^(pass|break|continue|return|raise)(\s|$)/.test(trimmed)) {
+    // Keep current indent but prepare to dedent next
+    newIndent = indent;
+  }
+  // If current line only contains 'pass', 'break', etc, and we're pressing enter
+  else if (
+    trimmed === "pass" ||
+    trimmed === "break" ||
+    trimmed === "continue"
+  ) {
+    // Decrease indentation for next line
+    if (indent.length >= 4) {
+      newIndent = indent.substring(0, indent.length - 4);
+    }
+  }
+
+  // Apply the new indentation
+  cm.replaceSelection(newIndent, "end");
+}
+
+// Handle Tab key
+function handleTabKey(cm) {
+  if (cm.somethingSelected()) {
+    // Indent selected lines
+    cm.indentSelection("add");
+  } else {
+    // Insert 4 spaces at cursor
+    cm.replaceSelection("    ", "end");
+  }
+}
+
+// Handle Shift-Tab key
+function handleShiftTabKey(cm) {
+  // Dedent current line or selection
+  cm.indentSelection("subtract");
+}
+
+// STEP 4: Bonus - Toggle Comments
+// ========================================
+
+function handleCommentToggle(cm) {
+  const selection = cm.getSelection();
+  const cursor = cm.getCursor();
+
+  if (selection) {
+    // Comment/uncomment selection
+    const lines = selection.split("\n");
+    const allCommented = lines.every((line) => line.trim().startsWith("#"));
+
+    if (allCommented) {
+      // Uncomment
+      const uncommented = lines
+        .map((line) => {
+          const match = line.match(/^(\s*)#\s?/);
+          return match ? line.substring(match[0].length) : line;
+        })
+        .join("\n");
+      cm.replaceSelection(uncommented);
+    } else {
+      // Comment
+      const commented = lines
+        .map((line) => {
+          if (line.trim()) {
+            const indent = line.search(/\S/);
+            return line.substring(0, indent) + "# " + line.substring(indent);
+          }
+          return line;
+        })
+        .join("\n");
+      cm.replaceSelection(commented);
+    }
+  } else {
+    // Toggle current line
+    const line = cm.getLine(cursor.line);
+    const trimmed = line.trim();
+
+    if (trimmed.startsWith("#")) {
+      // Uncomment
+      const match = line.match(/^(\s*)#\s?/);
+      if (match) {
+        const newLine = line.substring(match[0].length);
+        cm.replaceRange(
+          newLine,
+          CodeMirror.Pos(cursor.line, 0),
+          CodeMirror.Pos(cursor.line, line.length)
+        );
+      }
+    } else {
+      // Comment
+      const indent = line.search(/\S/);
+      const newLine = line.substring(0, indent) + "# " + line.substring(indent);
+      cm.replaceRange(
+        newLine,
+        CodeMirror.Pos(cursor.line, 0),
+        CodeMirror.Pos(cursor.line, line.length)
+      );
+    }
+  }
+}
+
+// Update theme when dark mode is toggled
+function updateEditorTheme() {
+  if (codeEditor) {
+    const isDark = document.body.classList.contains("dark");
+    codeEditor.setOption("theme", isDark ? "monokai" : "default");
+  }
+}
+
+// Get code from editor
+function getEditorCode() {
+  return codeEditor ? codeEditor.getValue() : "";
+}
+
+// Set code in editor
+function setEditorCode(code) {
+  if (codeEditor) {
+    codeEditor.setValue(code);
+  }
+}
+
 // Pre-fill username
 document.addEventListener("DOMContentLoaded", () => {
   if (userData) {
     elements.username.value = userData.username;
     elements.username.disabled = true;
   }
+  initializeCodeEditor();
 });
 
 // Initialize the application
@@ -69,12 +377,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 // Event Listeners
 function setupEventListeners() {
-  // Form validation and enabling submit button
   elements.username.addEventListener("input", validateForm);
   elements.problemSelect.addEventListener("change", onProblemSelect);
-  elements.codeEditor.addEventListener("input", validateForm);
 
-  // Buttons
   elements.submitBtn.addEventListener("click", submitSolution);
   elements.runBtn.addEventListener("click", runCode);
   elements.darkToggle.addEventListener("click", toggleTheme);
@@ -89,14 +394,12 @@ function setupEventListeners() {
     resetForm();
   });
 
-  // Modal backdrop click
   elements.successModal.addEventListener("click", (e) => {
     if (e.target === elements.successModal) {
       closeModal();
     }
   });
 
-  // Keyboard shortcuts
   document.addEventListener("keydown", (e) => {
     if (e.ctrlKey && e.key === "Enter") {
       if (!elements.submitBtn.disabled) {
@@ -108,7 +411,6 @@ function setupEventListeners() {
     }
   });
 
-  // Add this inside setupEventListeners() function
   elements.logoutBtn = document.getElementById("logoutBtn");
   elements.logoutBtn.addEventListener("click", () => {
     if (confirm("Are you sure you want to logout?")) {
@@ -123,8 +425,8 @@ async function loadProblems() {
   try {
     console.log("DEBUG: Starting loadProblems()");
     showLoading("Loading problems...");
-    console.log(`DEBUG: Fetching from ${API_BASE}/problems`);
-    const response = await fetch(`${API_BASE}/problems`);
+    console.log(`DEBUG: Fetching from ${API_BASE}/api/problems`);
+    const response = await fetch(`${API_BASE}/api/problems`);
     console.log("DEBUG: Response received:", response.status, response.ok);
     const data = await response.json();
     console.log("DEBUG: Data received:", data);
@@ -473,7 +775,7 @@ async function onProblemSelect() {
 async function loadProblemDetails(problemId) {
   try {
     // First try to get test cases from the backend API
-    const response = await fetch(`${API_BASE}/problem/${problemId}`);
+    const response = await fetch(`${API_BASE}/api/problem/${problemId}`);
     let problemData;
 
     if (response.ok) {
@@ -675,10 +977,9 @@ function displayProblemDetails(problemData) {
 
 // Validate form and enable/disable submit button
 function validateForm() {
+  const code = getEditorCode().trim();
   const isValid =
-    elements.username.value.trim() &&
-    elements.problemSelect.value &&
-    elements.codeEditor.value.trim();
+    elements.username.value.trim() && elements.problemSelect.value && code;
 
   elements.submitBtn.disabled = !isValid;
 
@@ -707,7 +1008,7 @@ async function runCode() {
   try {
     showLoading("Running your code...");
 
-    const response = await fetch(`${API_BASE}/run`, {
+    const response = await fetch(`${API_BASE}/api/run`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -774,7 +1075,7 @@ async function submitSolution() {
     showLoading("Evaluating your solution...");
     setSubmitButtonLoading(true);
 
-    const response = await fetch(`${API_BASE}/submit`, {
+    const response = await fetch(`${API_BASE}/api/submit`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -899,7 +1200,7 @@ async function showLeaderboard() {
   try {
     showLoading("Loading leaderboard...");
 
-    const response = await fetch(`${API_BASE}/leaderboard`);
+    const response = await fetch(`${API_BASE}/api/leaderboard`);
     const data = await response.json();
 
     displayLeaderboard(data.leaderboard);
@@ -946,8 +1247,8 @@ function toggleTheme() {
   document.body.classList.toggle("dark");
   const isDark = document.body.classList.contains("dark");
   localStorage.setItem("darkMode", isDark);
-
   elements.darkToggle.textContent = isDark ? "☀️ Light Mode" : "🌙 Dark Mode";
+  updateEditorTheme();
 }
 
 function loadTheme() {
@@ -956,6 +1257,7 @@ function loadTheme() {
     document.body.classList.add("dark");
     elements.darkToggle.textContent = "☀️ Light Mode";
   }
+  updateEditorTheme();
 }
 
 // Utility functions
@@ -990,10 +1292,10 @@ function closeModal() {
 function resetForm() {
   elements.username.value = "";
   elements.problemSelect.value = "";
-  elements.codeEditor.value = `# Write your Python solution here
+  setEditorCode(`# Write your Python solution here
 def solve():
     # Your code goes here
-    pass`;
+    pass`);
   elements.problemDescription.classList.add("hidden");
   elements.resultsSection.classList.add("hidden");
   elements.leaderboardSection.classList.add("hidden");

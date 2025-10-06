@@ -5,10 +5,70 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Coding Challenge Platform</title>
     <link rel="stylesheet" href="challenge.css" />
+
+    <!-- Add this to your <head> section -->
     <link
-      href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css"
       rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/lint/lint.min.css"
     />
+
+    <!-- Add this before challenge.js, after other CodeMirror scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/lint/lint.min.js"></script>
+
+    <!-- CodeMirror CSS -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/codemirror.min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/monokai.min.css"
+    />
+
+    <style>
+      /* Custom styles for CodeMirror */
+      .CodeMirror {
+        height: 400px !important;
+        border: 2px solid #e0e6ed;
+        border-radius: 12px;
+        font-size: 14px;
+        font-family: "Consolas", "Monaco", "Courier New", monospace;
+      }
+
+      .CodeMirror-gutters {
+        background: #f8f9fa;
+        border-right: 1px solid #e0e6ed;
+      }
+
+      body.dark .CodeMirror {
+        background: #1e1e1e;
+        color: #d4d4d4;
+        border-color: #4a5568;
+      }
+
+      body.dark .CodeMirror-gutters {
+        background: #2d3748;
+        border-right-color: #4a5568;
+      }
+
+      /* Error highlighting */
+      .CodeMirror-lint-mark-error {
+        background-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAABmJLR0QA/wD/AP+gvaeTAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAB3RJTUUH3QUXCToH00Y1UgAAACFJREFUCNdjPMDBUc/AwNDAAAEx/P//3wEIyMAIhkEGAAAmJwMBgYrEGAAAAABJRU5ErkJggg==");
+        background-position: left bottom;
+        background-repeat: repeat-x;
+      }
+
+      .CodeMirror-lint-tooltip {
+        background-color: #fee;
+        border: 1px solid #fcc;
+        border-radius: 4px;
+        color: #c00;
+        font-family: monospace;
+        font-size: 12px;
+        padding: 4px 8px;
+        max-width: 400px;
+      }
+    </style>
   </head>
   <body>
     <nav class="navbar">
@@ -52,14 +112,14 @@
       <div class="section editor-section">
         <h2>💻 Python Code Editor</h2>
         <div class="editor-container">
-          <textarea
-            id="codeEditor"
-            placeholder="# Write your Python solution here
+          <!-- CodeMirror will replace this -->
+          <textarea id="codeEditor" style="display: none">
+# Write your Python solution here
 def solve():
     # Your code goes here
-    pass"
-          ></textarea>
-          <!-- Find this section and modify: -->
+    pass
+          </textarea>
+
           <div class="editor-footer">
             <span class="language-badge">🐍 Python</span>
             <div style="display: flex; gap: 1rem">
@@ -135,10 +195,15 @@ def solve():
       </div>
     </div>
 
-    <!-- Scripts -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-core.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+    <!-- CodeMirror Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/python/python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/edit/closebrackets.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/edit/matchbrackets.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/lint/lint.min.js"></script>
+
+    <!-- Other Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
-    <script src="challenge.js?v=2"></script>
+    <script src="challenge.js?v=3"></script>
   </body>
 </html>
