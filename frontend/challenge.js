@@ -2,9 +2,6 @@
 let currentProblems = [];
 let currentUser = "";
 let currentProblem = "";
-// const API_BASE =
-//   window.location.hostname === "localhost" ? "http://127.0.0.1:8000" : "/api";
-// At the top of challenge.js, replace the API_BASE line with:
 // At the top of challenge.js, replace the API_BASE line with:
 const API_BASE = (() => {
   const hostname = window.location.hostname;
@@ -29,7 +26,8 @@ const elements = {
   problemDescription: document.getElementById("problemDescription"),
   problemDetails: document.getElementById("problemDetails"),
   sampleTests: document.getElementById("sampleTests"),
-  codeEditor: document.getElementById("codeEditor"),
+  // Now refers to the Ace Editor instance
+  codeEditor: null,
   submitBtn: document.getElementById("submitBtn"),
   runBtn: document.getElementById("runBtn"),
   resultsSection: document.getElementById("resultsSection"),
@@ -62,6 +60,25 @@ document.addEventListener("DOMContentLoaded", () => {
 
 // Initialize the application
 document.addEventListener("DOMContentLoaded", async () => {
+  // Initialize Ace Editor first
+  elements.codeEditor = ace.edit("editor");
+  elements.codeEditor.setTheme("ace/theme/monokai"); // Or another theme
+  elements.codeEditor.session.setMode("ace/mode/python");
+  elements.codeEditor.setOptions({
+    fontSize: "14px",
+    tabSize: 4,
+    useSoftTabs: true,
+  });
+  elements.codeEditor.setValue(
+    `# Write your Python solution here.
+# The 'solve' function should return a value, not print to stdout.
+# The tests will handle reading input and printing the return value.
+def solve():
+    # Your code goes here
+    pass`,
+    -1 // -1 moves the cursor to the start of the document
+  );
+
   await loadProblems();
   setupEventListeners();
   loadTheme();
@@ -72,7 +89,8 @@ function setupEventListeners() {
   // Form validation and enabling submit button
   elements.username.addEventListener("input", validateForm);
   elements.problemSelect.addEventListener("change", onProblemSelect);
-  elements.codeEditor.addEventListener("input", validateForm);
+  // Ace Editor has its own change event listener
+  elements.codeEditor.getSession().on('change', validateForm);
 
   // Buttons
   elements.submitBtn.addEventListener("click", submitSolution);
@@ -180,7 +198,7 @@ const problemDescriptions = {
     description:
       "Given an integer n, return true if it is a power of two. Otherwise, return false. An integer n is a power of two, if there exists an integer x such that n == 2^x.",
     inputFormat: "A single integer n",
-    outputFormat: "Print 'true' if n is a power of two, 'false' otherwise",
+    outputFormat: "The function should return a boolean (true or false).",
     constraints: ["-2^31 ≤ n ≤ 2^31 - 1"],
     examples: [
       {
@@ -207,7 +225,7 @@ const problemDescriptions = {
     inputFormat:
       "First line: integer n (array length)\nSecond line: n space-separated integers (if n > 0)",
     outputFormat:
-      "Print the triplets in the format [[a,b,c],[d,e,f]] or [] if no triplets found",
+      "The function should return a list of lists, e.g., [[-1,-1,2],[-1,0,1]] or [] if no triplets found.",
     constraints: ["0 ≤ n ≤ 3000", "-10^5 ≤ nums[i] ≤ 10^5"],
     examples: [
       {
@@ -228,7 +246,7 @@ const problemDescriptions = {
       "Given a sorted array of distinct integers and a target value, return the index if the target is found. If not, return the index where it would be if it were inserted in order. You must write an algorithm with O(log n) runtime complexity.",
     inputFormat:
       "First line: sorted array in format [1,3,5,6]\nSecond line: target integer",
-    outputFormat: "Print the index position as an integer",
+    outputFormat: "The function should return an integer representing the index.",
     constraints: [
       "1 ≤ nums.length ≤ 10^4",
       "-10^4 ≤ nums[i] ≤ 10^4",
@@ -253,7 +271,7 @@ const problemDescriptions = {
     description:
       "You have a list arr of all integers in the range [1, n] sorted in a strictly increasing order. Apply the following algorithm: Starting from left to right, remove the first number and every other number afterward until you reach the end of the list. Repeat the previous step again, but this time from right to left. Keep repeating the steps again, alternating left to right and right to left, until a single number remains. Given the integer n, return the last number that remains in arr.",
     inputFormat: "A single integer n",
-    outputFormat: "Print the last remaining number",
+    outputFormat: "The function should return the last remaining number as an integer.",
     constraints: ["1 ≤ n ≤ 10^9"],
     examples: [
       {
@@ -270,7 +288,7 @@ const problemDescriptions = {
       "In a town, there are n people labeled from 1 to n. There is a rumor that one of these people is secretly the town judge. If the town judge exists, then: (1) The town judge trusts nobody. (2) Everybody (except for the town judge) trusts the town judge. (3) There is exactly one person that satisfies properties 1 and 2. You are given an array trust where trust[i] = [ai, bi] representing that the person labeled ai trusts the person labeled bi. Return the label of the town judge if the town judge exists and can be identified, or return -1 otherwise.",
     inputFormat:
       "First line: integer n (number of people)\nSecond line: integer m (number of trust relationships)\nNext m lines: two integers ai bi (ai trusts bi)",
-    outputFormat: "Print the label of the town judge, or -1 if no judge exists",
+    outputFormat: "The function should return the label of the town judge, or -1 as an integer.",
     constraints: [
       "1 ≤ n ≤ 1000",
       "0 ≤ trust.length ≤ 10^4",
@@ -291,7 +309,7 @@ const problemDescriptions = {
     description:
       "Design a queue that supports push and pop operations in the front, middle, and back. Implement the FrontMiddleBack class with various operations like pushFront, pushMiddle, pushBack, popFront, popMiddle, popBack.",
     inputFormat: "Series of operations to perform on the queue",
-    outputFormat: "Return values for pop operations, -1 if queue is empty",
+    outputFormat: "The function should return a list of values for pop operations, or -1 for empty queue.",
     constraints: [
       "1 ≤ val ≤ 10^9",
       "At most 1000 calls will be made to each function",
@@ -309,7 +327,7 @@ const problemDescriptions = {
     description:
       "Given the head of a singly linked list, sort the list using insertion sort, and return the sorted list's head. The algorithm of insertion sort is: Insertion sort iterates, consuming one input element each repetition, and growing a sorted output list. At each iteration, insertion sort removes one element from the input data, finds the location it belongs within the sorted list, and inserts it there.",
     inputFormat: "Linked list values as space-separated integers",
-    outputFormat: "Print the sorted linked list values",
+    outputFormat: "The function should return the sorted linked list values as a list of integers.",
     constraints: [
       "The number of nodes in the list is in the range [1, 5000]",
       "-5000 ≤ Node.val ≤ 5000",
@@ -327,7 +345,7 @@ const problemDescriptions = {
     description:
       "Write a function to find the longest common prefix string amongst an array of strings. If there is no common prefix, return an empty string.",
     inputFormat: "First line: number of strings\nNext lines: the strings",
-    outputFormat: "Print the longest common prefix string",
+    outputFormat: "The function should return the longest common prefix string.",
     constraints: [
       "1 ≤ strs.length ≤ 200",
       "0 ≤ strs[i].length ≤ 200",
@@ -346,14 +364,14 @@ const problemDescriptions = {
     description:
       "A path in a binary tree is a sequence of nodes where each pair of adjacent nodes in the sequence has an edge connecting them. A node can only appear in the sequence at most once. The path does not need to pass through the root. The path sum of a path is the sum of the node's values in the path. Given the root of a binary tree, return the maximum path sum of any non-empty path.",
     inputFormat: "Binary tree nodes in level order (null for missing nodes)",
-    outputFormat: "Print the maximum path sum",
+    outputFormat: "The function should return the maximum path sum as an integer.",
     constraints: [
       "The number of nodes in the tree is in the range [1, 3 * 10^4]",
       "-1000 ≤ Node.val ≤ 1000",
     ],
     examples: [
       {
-        input: "1 2 3",
+        input: "[1,2,3]",
         output: "6",
         explanation:
           "The optimal path is 2 -> 1 -> 3 with a path sum of 2 + 1 + 3 = 6",
@@ -366,7 +384,7 @@ const problemDescriptions = {
       "Implement the merge sort algorithm to sort an array of integers in ascending order. Merge sort is a divide-and-conquer algorithm that divides the input array into two halves, recursively sorts them, and then merges the sorted halves.",
     inputFormat:
       "First line: number of elements\nSecond line: space-separated integers",
-    outputFormat: "Print the sorted array as space-separated integers",
+    outputFormat: "The function should return the sorted array as a list of integers.",
     constraints: ["1 ≤ n ≤ 10^5", "-10^9 ≤ arr[i] ≤ 10^9"],
     examples: [
       {
@@ -382,7 +400,7 @@ const problemDescriptions = {
       "You are given the heads of two sorted linked lists list1 and list2. Merge the two lists in a one sorted list. The list should be made by splicing together the nodes of the first two lists. Return the head of the merged linked list.",
     inputFormat:
       "First line: first sorted list values\nSecond line: second sorted list values",
-    outputFormat: "Print the merged sorted list values",
+    outputFormat: "The function should return the merged sorted list values as a list of integers.",
     constraints: [
       "The number of nodes in both lists is in the range [0, 50]",
       "-100 ≤ Node.val ≤ 100",
@@ -401,7 +419,7 @@ const problemDescriptions = {
     description:
       "Given an input string s and a pattern p, implement regular expression matching with support for '.' and '*' where: '.' Matches any single character. '*' Matches zero or more of the preceding element. The matching should cover the entire input string (not partial).",
     inputFormat: "First line: input string s\nSecond line: pattern p",
-    outputFormat: "Print 'true' if s matches p, 'false' otherwise",
+    outputFormat: "The function should return a boolean (true or false).",
     constraints: [
       "1 ≤ s.length ≤ 20",
       "1 ≤ p.length ≤ 30",
@@ -421,7 +439,7 @@ const problemDescriptions = {
     description:
       "Implement a last-in-first-out (LIFO) stack using only two queues. The implemented stack should support all the functions of a normal stack (push, top, pop, and empty).",
     inputFormat: "Series of operations to perform on the stack",
-    outputFormat: "Return values for top and pop operations",
+    outputFormat: "The function should return a list of values for top and pop operations.",
     constraints: [
       "1 ≤ x ≤ 9",
       "At most 100 calls will be made to push, pop, top, and empty",
@@ -439,7 +457,7 @@ const problemDescriptions = {
     description:
       "TinyURL is a URL shortening service where you enter a URL and it returns a short URL. Design a class to encode a URL and decode a tiny URL. There is no restriction on how your encode/decode algorithm should work. You just need to ensure that a URL can be encoded to a tiny URL and the tiny URL can be decoded to the original URL.",
     inputFormat: "URL to encode or tiny URL to decode",
-    outputFormat: "Encoded tiny URL or decoded original URL",
+    outputFormat: "The function should return a string for the encoded/decoded URL.",
     constraints: [
       "1 ≤ url.length ≤ 10^4",
       "url is guaranteed to be a valid URL",
@@ -602,8 +620,7 @@ function displayProblemDetails(problemData) {
                 <div class="section-block">
                     <h5>🎯 Implementation Note</h5>
                     <p class="implementation-note">
-                        Implement a function called <code>solve()</code> that reads input from stdin and prints the result to stdout. 
-                        Make sure your output format exactly matches the expected format.
+                        Implement a function called <code>solve()</code> that reads input from stdin and returns the result. Do not use <code>print()</code>.
                     </p>
                 </div>
             </div>
@@ -623,7 +640,7 @@ function displayProblemDetails(problemData) {
                 </div>
             </div>
             <div class="problem-content">
-                <p>Implement a function called <code>solve()</code> that reads input and produces the correct output.</p>
+                <p>Implement a function called <code>solve()</code> that reads input and returns the correct output. Do not use <code>print()</code>.</p>
                 <p><strong>Note:</strong> Analyze the sample test cases below to understand the problem requirements.</p>
             </div>
         `;
@@ -675,10 +692,11 @@ function displayProblemDetails(problemData) {
 
 // Validate form and enable/disable submit button
 function validateForm() {
+  const code = elements.codeEditor.getValue();
   const isValid =
     elements.username.value.trim() &&
     elements.problemSelect.value &&
-    elements.codeEditor.value.trim();
+    code.trim();
 
   elements.submitBtn.disabled = !isValid;
 
@@ -691,7 +709,7 @@ function validateForm() {
 
 // Run code without submitting
 async function runCode() {
-  const code = elements.codeEditor.value.trim();
+  const code = elements.codeEditor.getValue();
   const problemId = elements.problemSelect.value;
 
   if (!code) {
@@ -763,7 +781,7 @@ async function submitSolution() {
 
   const username = elements.username.value.trim();
   const problemId = elements.problemSelect.value;
-  const code = elements.codeEditor.value.trim();
+  const code = elements.codeEditor.getValue();
 
   if (!username || !problemId || !code) {
     showError("Please fill in all fields before submitting.");
@@ -948,6 +966,8 @@ function toggleTheme() {
   localStorage.setItem("darkMode", isDark);
 
   elements.darkToggle.textContent = isDark ? "☀️ Light Mode" : "🌙 Dark Mode";
+  // Set Ace Editor theme to match
+  elements.codeEditor.setTheme(isDark ? "ace/theme/tomorrow_night" : "ace/theme/solarized_light");
 }
 
 function loadTheme() {
@@ -956,6 +976,8 @@ function loadTheme() {
     document.body.classList.add("dark");
     elements.darkToggle.textContent = "☀️ Light Mode";
   }
+  // Set Ace Editor theme on page load
+  elements.codeEditor.setTheme(isDark ? "ace/theme/tomorrow_night" : "ace/theme/solarized_light");
 }
 
 // Utility functions
@@ -990,10 +1012,16 @@ function closeModal() {
 function resetForm() {
   elements.username.value = "";
   elements.problemSelect.value = "";
-  elements.codeEditor.value = `# Write your Python solution here
+  // Update to use Ace Editor's setValue()
+  elements.codeEditor.setValue(
+    `# Write your Python solution here.
+# The 'solve' function should return a value, not print to stdout.
+# The tests will handle reading input and printing the return value.
 def solve():
     # Your code goes here
-    pass`;
+    pass`,
+    -1
+  );
   elements.problemDescription.classList.add("hidden");
   elements.resultsSection.classList.add("hidden");
   elements.leaderboardSection.classList.add("hidden");
