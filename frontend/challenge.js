@@ -2,10 +2,9 @@
 let currentProblems = [];
 let currentUser = "";
 let currentProblem = "";
-// const API_BASE =
-//   window.location.hostname === "localhost" ? "http://127.0.0.1:8000" : "/api";
-// At the top of challenge.js, replace the API_BASE line with:
-// At the top of challenge.js, replace the API_BASE line with:
+let codeEditor; // CodeMirror instance
+
+// Better API_BASE detection
 const API_BASE = (() => {
   const hostname = window.location.hostname;
   const protocol = window.location.protocol;
@@ -29,7 +28,7 @@ const elements = {
   problemDescription: document.getElementById("problemDescription"),
   problemDetails: document.getElementById("problemDetails"),
   sampleTests: document.getElementById("sampleTests"),
-  codeEditor: document.getElementById("codeEditor"),
+  codeEditorTextarea: document.getElementById("codeEditor"),
   submitBtn: document.getElementById("submitBtn"),
   runBtn: document.getElementById("runBtn"),
   resultsSection: document.getElementById("resultsSection"),
@@ -52,12 +51,317 @@ if (!userData) {
   window.location.href = "auth.html";
 }
 
+// Initialize CodeMirror
+function initializeCodeEditor() {
+  const textarea = document.getElementById("codeEditor");
+
+  codeEditor = CodeMirror.fromTextArea(textarea, {
+    // Basic settings
+    mode: "python",
+    theme: document.body.classList.contains("dark") ? "monokai" : "default",
+
+    // Editor features
+    lineNumbers: true,
+    indentUnit: 4,
+    indentWithTabs: false,
+    smartIndent: true,
+    autoCloseBrackets: true,
+    matchBrackets: true,
+    lineWrapping: true,
+
+    // Linting configuration
+    gutters: ["CodeMirror-lint-markers"],
+    lint: {
+      getAnnotations: pythonLinter,
+      async: false, // Changed to false for immediate feedback
+      delay: 500, // Wait 500ms after typing stops
+    },
+
+    // Extra key bindings
+    extraKeys: {
+      Enter: handleEnterKey,
+      Tab: handleTabKey,
+      "Shift-Tab": handleShiftTabKey,
+      "Ctrl-/": handleCommentToggle, // Bonus: toggle comments
+    },
+  });
+
+  // Set initial value
+  codeEditor.setValue(`# Write your Python solution here
+def solve():
+    # Your code goes here
+    pass`);
+
+  // Listen for changes to validate form
+  codeEditor.on("change", () => {
+    validateForm();
+  });
+
+  console.log("CodeMirror initialized successfully");
+}
+
+// Python Linter - checks for basic syntax errors
+function pythonLinter(text) {
+  const errors = [];
+  const lines = text.split("\n");
+  const indentStack = [0]; // Track indentation levels
+
+  lines.forEach((line, lineNum) => {
+    const trimmed = line.trim();
+
+    // Skip empty lines and comments
+    if (!trimmed || trimmed.startsWith("#")) {
+      return;
+    }
+
+    // ===== ERROR 1: Unclosed brackets/parentheses/braces =====
+    const openCount = (line.match(/[\(\[\{]/g) || []).length;
+    const closeCount = (line.match(/[\)\]\}]/g) || []).length;
+
+    if (openCount > closeCount) {
+      errors.push({
+        from: CodeMirror.Pos(
+          lineNum,
+          line.indexOf("(") !== -1 ? line.indexOf("(") : 0
+        ),
+        to: CodeMirror.Pos(lineNum, line.length),
+        message: "Unclosed bracket, parenthesis, or brace",
+        severity: "error",
+      });
+    }
+
+    // ===== ERROR 2: Missing colon after def, if, else, etc. =====
+    const colonKeywords =
+      /^(def|if|elif|else|for|while|try|except|finally|class|with)\s+/;
+    const hasColon = line.includes(":");
+
+    if (colonKeywords.test(trimmed) && !hasColon) {
+      errors.push({
+        from: CodeMirror.Pos(lineNum, 0),
+        to: CodeMirror.Pos(lineNum, line.length),
+        message: `Missing colon (:) at the end of ${
+          trimmed.split(/\s+/)[0]
+        } statement`,
+        severity: "error",
+      });
+    }
+
+    // ===== ERROR 3: Invalid indentation =====
+    const currentIndent = line.search(/\S/);
+    if (currentIndent !== -1 && currentIndent % 4 !== 0) {
+      errors.push({
+        from: CodeMirror.Pos(lineNum, 0),
+        to: CodeMirror.Pos(lineNum, currentIndent),
+        message: "Indentation should be a multiple of 4 spaces",
+        severity: "warning",
+      });
+    }
+
+    // ===== ERROR 4: Common typos =====
+    const typos = {
+      prnt: "print",
+      retrun: "return",
+      eslif: "elif",
+      esle: "else",
+      dfe: "def",
+      improt: "import",
+      form: "from",
+    };
+
+    Object.keys(typos).forEach((typo) => {
+      const regex = new RegExp(`\\b${typo}\\b`, "g");
+      let match;
+      while ((match = regex.exec(line)) !== null) {
+        errors.push({
+          from: CodeMirror.Pos(lineNum, match.index),
+          to: CodeMirror.Pos(lineNum, match.index + typo.length),
+          message: `Did you mean '${typos[typo]}'?`,
+          severity: "error",
+        });
+      }
+    });
+
+    // ===== ERROR 5: Assignment in conditions =====
+    if (/^(if|while|elif)\s+.*[^=!<>]=[^=]/.test(trimmed)) {
+      const assignIndex = line.indexOf("=");
+      errors.push({
+        from: CodeMirror.Pos(lineNum, assignIndex),
+        to: CodeMirror.Pos(lineNum, assignIndex + 1),
+        message: "Use '==' for comparison, not '=' (assignment)",
+        severity: "warning",
+      });
+    }
+
+    // ===== ERROR 6: Multiple statements on one line =====
+    if ((trimmed.match(/;/g) || []).length > 0) {
+      errors.push({
+        from: CodeMirror.Pos(lineNum, line.indexOf(";")),
+        to: CodeMirror.Pos(lineNum, line.indexOf(";") + 1),
+        message: "Avoid multiple statements on one line (PEP 8)",
+        severity: "warning",
+      });
+    }
+
+    // ===== ERROR 7: Missing whitespace around operators =====
+    if (/\w+[+\-*/%]=\w+/.test(trimmed) && !trimmed.includes("==")) {
+      errors.push({
+        from: CodeMirror.Pos(lineNum, 0),
+        to: CodeMirror.Pos(lineNum, line.length),
+        message: "Missing whitespace around operator (PEP 8)",
+        severity: "info",
+      });
+    }
+  });
+
+  return errors;
+}
+
+// Handle Enter key for smart indentation
+function handleEnterKey(cm) {
+  const cursor = cm.getCursor();
+  const line = cm.getLine(cursor.line);
+  const trimmed = line.trim();
+
+  // Get current indentation
+  const currentIndent = line.search(/\S/);
+  const indent = currentIndent === -1 ? "" : line.substring(0, currentIndent);
+
+  // Insert newline
+  cm.replaceSelection("\n", "end");
+
+  // Determine new indentation
+  let newIndent = indent;
+
+  // If line ends with colon, increase indentation
+  if (trimmed.endsWith(":")) {
+    newIndent = indent + "    ";
+  }
+  // If line is 'pass', 'break', 'continue', 'return', decrease next indent
+  else if (/^(pass|break|continue|return|raise)(\s|$)/.test(trimmed)) {
+    // Keep current indent but prepare to dedent next
+    newIndent = indent;
+  }
+  // If current line only contains 'pass', 'break', etc, and we're pressing enter
+  else if (
+    trimmed === "pass" ||
+    trimmed === "break" ||
+    trimmed === "continue"
+  ) {
+    // Decrease indentation for next line
+    if (indent.length >= 4) {
+      newIndent = indent.substring(0, indent.length - 4);
+    }
+  }
+
+  // Apply the new indentation
+  cm.replaceSelection(newIndent, "end");
+}
+
+// Handle Tab key
+function handleTabKey(cm) {
+  if (cm.somethingSelected()) {
+    // Indent selected lines
+    cm.indentSelection("add");
+  } else {
+    // Insert 4 spaces at cursor
+    cm.replaceSelection("    ", "end");
+  }
+}
+
+// Handle Shift-Tab key
+function handleShiftTabKey(cm) {
+  // Dedent current line or selection
+  cm.indentSelection("subtract");
+}
+
+// Bonus - Toggle Comments
+function handleCommentToggle(cm) {
+  const selection = cm.getSelection();
+  const cursor = cm.getCursor();
+
+  if (selection) {
+    // Comment/uncomment selection
+    const lines = selection.split("\n");
+    const allCommented = lines.every((line) => line.trim().startsWith("#"));
+
+    if (allCommented) {
+      // Uncomment
+      const uncommented = lines
+        .map((line) => {
+          const match = line.match(/^(\s*)#\s?/);
+          return match ? line.substring(match[0].length) : line;
+        })
+        .join("\n");
+      cm.replaceSelection(uncommented);
+    } else {
+      // Comment
+      const commented = lines
+        .map((line) => {
+          if (line.trim()) {
+            const indent = line.search(/\S/);
+            return line.substring(0, indent) + "# " + line.substring(indent);
+          }
+          return line;
+        })
+        .join("\n");
+      cm.replaceSelection(commented);
+    }
+  } else {
+    // Toggle current line
+    const line = cm.getLine(cursor.line);
+    const trimmed = line.trim();
+
+    if (trimmed.startsWith("#")) {
+      // Uncomment
+      const match = line.match(/^(\s*)#\s?/);
+      if (match) {
+        const newLine = line.substring(match[0].length);
+        cm.replaceRange(
+          newLine,
+          CodeMirror.Pos(cursor.line, 0),
+          CodeMirror.Pos(cursor.line, line.length)
+        );
+      }
+    } else {
+      // Comment
+      const indent = line.search(/\S/);
+      const newLine = line.substring(0, indent) + "# " + line.substring(indent);
+      cm.replaceRange(
+        newLine,
+        CodeMirror.Pos(cursor.line, 0),
+        CodeMirror.Pos(cursor.line, line.length)
+      );
+    }
+  }
+}
+
+// Update theme when dark mode is toggled
+function updateEditorTheme() {
+  if (codeEditor) {
+    const isDark = document.body.classList.contains("dark");
+    codeEditor.setOption("theme", isDark ? "monokai" : "default");
+  }
+}
+
+// Get code from editor
+function getEditorCode() {
+  return codeEditor ? codeEditor.getValue() : "";
+}
+
+// Set code in editor
+function setEditorCode(code) {
+  if (codeEditor) {
+    codeEditor.setValue(code);
+  }
+}
+
 // Pre-fill username
 document.addEventListener("DOMContentLoaded", () => {
   if (userData) {
     elements.username.value = userData.username;
     elements.username.disabled = true;
   }
+  initializeCodeEditor();
 });
 
 // Initialize the application
@@ -69,12 +373,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 // Event Listeners
 function setupEventListeners() {
-  // Form validation and enabling submit button
   elements.username.addEventListener("input", validateForm);
   elements.problemSelect.addEventListener("change", onProblemSelect);
-  elements.codeEditor.addEventListener("input", validateForm);
 
-  // Buttons
   elements.submitBtn.addEventListener("click", submitSolution);
   elements.runBtn.addEventListener("click", runCode);
   elements.darkToggle.addEventListener("click", toggleTheme);
@@ -89,14 +390,12 @@ function setupEventListeners() {
     resetForm();
   });
 
-  // Modal backdrop click
   elements.successModal.addEventListener("click", (e) => {
     if (e.target === elements.successModal) {
       closeModal();
     }
   });
 
-  // Keyboard shortcuts
   document.addEventListener("keydown", (e) => {
     if (e.ctrlKey && e.key === "Enter") {
       if (!elements.submitBtn.disabled) {
@@ -108,7 +407,6 @@ function setupEventListeners() {
     }
   });
 
-  // Add this inside setupEventListeners() function
   elements.logoutBtn = document.getElementById("logoutBtn");
   elements.logoutBtn.addEventListener("click", () => {
     if (confirm("Are you sure you want to logout?")) {
@@ -123,8 +421,8 @@ async function loadProblems() {
   try {
     console.log("DEBUG: Starting loadProblems()");
     showLoading("Loading problems...");
-    console.log(`DEBUG: Fetching from ${API_BASE}/problems`);
-    const response = await fetch(`${API_BASE}/problems`);
+    console.log(`DEBUG: Fetching from ${API_BASE}/api/problems`);
+    const response = await fetch(`${API_BASE}/api/problems`);
     console.log("DEBUG: Response received:", response.status, response.ok);
     const data = await response.json();
     console.log("DEBUG: Data received:", data);
@@ -473,7 +771,7 @@ async function onProblemSelect() {
 async function loadProblemDetails(problemId) {
   try {
     // First try to get test cases from the backend API
-    const response = await fetch(`${API_BASE}/problem/${problemId}`);
+    const response = await fetch(`${API_BASE}/api/problem/${problemId}`);
     let problemData;
 
     if (response.ok) {
@@ -602,7 +900,7 @@ function displayProblemDetails(problemData) {
                 <div class="section-block">
                     <h5>🎯 Implementation Note</h5>
                     <p class="implementation-note">
-                        Implement a function called <code>solve()</code> that reads input from stdin and prints the result to stdout. 
+                        Implement a function called <code>solve()</code> that reads input from stdin and prints the result to stdout.
                         Make sure your output format exactly matches the expected format.
                     </p>
                 </div>
@@ -675,23 +973,48 @@ function displayProblemDetails(problemData) {
 
 // Validate form and enable/disable submit button
 function validateForm() {
-  const isValid =
-    elements.username.value.trim() &&
-    elements.problemSelect.value &&
-    elements.codeEditor.value.trim();
+  const username = elements.username.value.trim();
+  const problemId = elements.problemSelect.value;
+  const code = getEditorCode().trim();
+
+  console.log("Validating form:", {
+    hasUsername: !!username,
+    hasProblemId: !!problemId,
+    hasCode: !!code,
+    codeLength: code.length,
+  });
+
+  const isValid = username && problemId && code;
 
   elements.submitBtn.disabled = !isValid;
 
   if (isValid) {
     elements.submitBtn.classList.add("ready");
+    console.log("Form is valid - submit button enabled");
   } else {
     elements.submitBtn.classList.remove("ready");
+    console.log("Form is invalid - submit button disabled");
   }
+
+  return isValid;
 }
+
+// Add this debugging function to check CodeMirror state
+function debugCodeEditor() {
+  console.log("CodeMirror Debug Info:");
+  console.log("- Editor exists:", !!codeEditor);
+  console.log("- Code length:", getEditorCode().length);
+  console.log("- Code preview:", getEditorCode().substring(0, 100));
+  console.log("- Submit button disabled:", elements.submitBtn.disabled);
+}
+
+// Call this in browser console to debug: window.debugCodeEditor()
+window.debugCodeEditor = debugCodeEditor;
+window.validateForm = validateForm;
 
 // Run code without submitting
 async function runCode() {
-  const code = elements.codeEditor.value.trim();
+  const code = getEditorCode().trim();
   const problemId = elements.problemSelect.value;
 
   if (!code) {
@@ -705,9 +1028,9 @@ async function runCode() {
   }
 
   try {
-    showLoading("Running your code...");
+    showLoading("Running your code with public test cases...");
 
-    const response = await fetch(`${API_BASE}/run`, {
+    const response = await fetch(`${API_BASE}/api/run`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -731,26 +1054,106 @@ async function runCode() {
 
 // Display run results
 function displayRunResults(result) {
-  const runResultsHtml = `
-        <div class="result-card ${result.success ? "passed" : "failed"}">
-            <h4>${
-              result.success
-                ? "✅ Code Executed Successfully"
-                : "❌ Execution Failed"
-            }</h4>
-            <div class="result-details">
-                <strong>Output:</strong>
-                <pre style="background: rgba(248, 250, 252, 0.8); padding: 1rem; border-radius: 8px; margin-top: 0.5rem;">${escapeHtml(
-                  result.output || result.error || "No output"
-                )}</pre>
-                ${
-                  result.execution_time
-                    ? `<p><strong>Execution Time:</strong> ${result.execution_time}s</p>`
-                    : ""
-                }
-            </div>
+  if (!result.success) {
+    const errorHtml = `
+      <div class="result-card failed">
+        <h4>❌ Execution Failed</h4>
+        <div class="result-details">
+          <strong>Error:</strong>
+          <pre style="background: rgba(239, 68, 68, 0.1); padding: 1rem; border-radius: 8px; margin-top: 0.5rem; color: #dc2626;">${escapeHtml(
+            result.error || "Unknown error"
+          )}</pre>
         </div>
+      </div>
     `;
+    elements.resultsContent.innerHTML = errorHtml;
+    elements.resultsSection.classList.remove("hidden");
+    elements.resultsSection.scrollIntoView({ behavior: "smooth" });
+    return;
+  }
+
+  // Build HTML for multiple test results
+  const summary = result.summary;
+  const testResults = result.results || [];
+
+  let statusClass = "failed";
+  let statusIcon = "❌";
+
+  if (summary.passed === summary.total) {
+    statusClass = "passed";
+    statusIcon = "✅";
+  } else if (summary.passed > 0) {
+    statusClass = "partial";
+    statusIcon = "⚠️";
+  }
+
+  let runResultsHtml = `
+    <div class="result-card ${statusClass}">
+      <h4>${statusIcon} Test Results: ${summary.passed}/${summary.total} Passed (${summary.percentage}%)</h4>
+      <p style="margin: 0.5rem 0; color: #666;">Running against public test cases</p>
+    </div>
+  `;
+
+  // Add individual test case results
+  testResults.forEach((test) => {
+    const testClass = test.passed ? "passed" : "failed";
+    const testIcon = test.passed ? "✅" : "❌";
+
+    runResultsHtml += `
+      <div class="result-card ${testClass}" style="margin-top: 1rem;">
+        <h5>${testIcon} Test Case ${test.test_number}</h5>
+        
+        <div class="test-case-details" style="margin-top: 1rem;">
+          <div style="margin-bottom: 0.75rem;">
+            <strong>Input:</strong>
+            <pre style="background: rgba(248, 250, 252, 0.8); padding: 0.75rem; border-radius: 8px; margin-top: 0.25rem; font-size: 0.9rem;">${escapeHtml(
+              test.input || "(empty)"
+            )}</pre>
+          </div>
+          
+          ${
+            test.success
+              ? `
+            <div style="margin-bottom: 0.75rem;">
+              <strong>Expected Output:</strong>
+              <pre style="background: rgba(248, 250, 252, 0.8); padding: 0.75rem; border-radius: 8px; margin-top: 0.25rem; font-size: 0.9rem;">${escapeHtml(
+                test.expected_output
+              )}</pre>
+            </div>
+            
+            <div style="margin-bottom: 0.75rem;">
+              <strong>Your Output:</strong>
+              <pre style="background: ${
+                test.passed
+                  ? "rgba(16, 185, 129, 0.1)"
+                  : "rgba(239, 68, 68, 0.1)"
+              }; padding: 0.75rem; border-radius: 8px; margin-top: 0.25rem; font-size: 0.9rem;">${escapeHtml(
+                test.actual_output || "(no output)"
+              )}</pre>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.5rem; background: rgba(248, 250, 252, 0.6); border-radius: 8px;">
+              <span><strong>Status:</strong> ${
+                test.passed
+                  ? '<span style="color: #10b981;">Passed ✓</span>'
+                  : '<span style="color: #ef4444;">Failed ✗</span>'
+              }</span>
+              <span><strong>Time:</strong> ${test.execution_time}s</span>
+            </div>
+          `
+              : `
+            <div style="margin-bottom: 0.75rem;">
+              <strong>Error:</strong>
+              <pre style="background: rgba(239, 68, 68, 0.1); padding: 0.75rem; border-radius: 8px; margin-top: 0.25rem; color: #dc2626; font-size: 0.9rem;">${escapeHtml(
+                test.error || "Unknown error"
+              )}</pre>
+            </div>
+          `
+          }
+        </div>
+      </div>
+    `;
+  });
 
   elements.resultsContent.innerHTML = runResultsHtml;
   elements.resultsSection.classList.remove("hidden");
@@ -759,11 +1162,20 @@ function displayRunResults(result) {
 
 // Submit solution
 async function submitSolution() {
-  if (elements.submitBtn.disabled) return;
+  if (elements.submitBtn.disabled) {
+    console.log("Submit button is disabled");
+    return;
+  }
 
   const username = elements.username.value.trim();
   const problemId = elements.problemSelect.value;
-  const code = elements.codeEditor.value.trim();
+  const code = getEditorCode().trim();
+
+  console.log("Submitting solution:", {
+    username,
+    problemId,
+    codeLength: code.length,
+  });
 
   if (!username || !problemId || !code) {
     showError("Please fill in all fields before submitting.");
@@ -774,10 +1186,13 @@ async function submitSolution() {
     showLoading("Evaluating your solution...");
     setSubmitButtonLoading(true);
 
-    const response = await fetch(`${API_BASE}/submit`, {
+    console.log("Sending request to:", `${API_BASE}/api/submit`);
+
+    const response = await fetch(`${API_BASE}/api/submit`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        Accept: "application/json",
       },
       body: JSON.stringify({
         user_id: username,
@@ -786,11 +1201,17 @@ async function submitSolution() {
       }),
     });
 
+    console.log("Response status:", response.status);
+
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      const errorText = await response.text();
+      console.error("Error response:", errorText);
+      throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
     }
 
     const result = await response.json();
+    console.log("Result received:", result);
+
     hideLoading();
     setSubmitButtonLoading(false);
 
@@ -806,7 +1227,7 @@ async function submitSolution() {
     hideLoading();
     setSubmitButtonLoading(false);
     showError(
-      "Failed to submit solution. Please check your code and try again."
+      `Failed to submit solution: ${error.message}. Please check the console for details.`
     );
   }
 }
@@ -899,7 +1320,7 @@ async function showLeaderboard() {
   try {
     showLoading("Loading leaderboard...");
 
-    const response = await fetch(`${API_BASE}/leaderboard`);
+    const response = await fetch(`${API_BASE}/api/leaderboard`);
     const data = await response.json();
 
     displayLeaderboard(data.leaderboard);
@@ -946,8 +1367,8 @@ function toggleTheme() {
   document.body.classList.toggle("dark");
   const isDark = document.body.classList.contains("dark");
   localStorage.setItem("darkMode", isDark);
-
   elements.darkToggle.textContent = isDark ? "☀️ Light Mode" : "🌙 Dark Mode";
+  updateEditorTheme();
 }
 
 function loadTheme() {
@@ -956,6 +1377,7 @@ function loadTheme() {
     document.body.classList.add("dark");
     elements.darkToggle.textContent = "☀️ Light Mode";
   }
+  updateEditorTheme();
 }
 
 // Utility functions
@@ -990,10 +1412,10 @@ function closeModal() {
 function resetForm() {
   elements.username.value = "";
   elements.problemSelect.value = "";
-  elements.codeEditor.value = `# Write your Python solution here
+  setEditorCode(`# Write your Python solution here
 def solve():
     # Your code goes here
-    pass`;
+    pass`);
   elements.problemDescription.classList.add("hidden");
   elements.resultsSection.classList.add("hidden");
   elements.leaderboardSection.classList.add("hidden");
