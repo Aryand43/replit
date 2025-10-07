@@ -192,28 +192,108 @@ async def submit_code_api(submission: Submission):
         "leaderboard_entry": submission_entry
     }
 
+# @app.post("/api/run")
+# async def run_code_api(request: dict):
+#     """Run code without grading."""
+#     try:
+#         problem_id = request.get("problem_id")
+#         code = request.get("code")
+#         if not problem_id or not code:
+#             return {"success": False, "error": "Missing problem_id or code"}
+#         test_case_path = os.path.join("test_cases", f"{problem_id}.json")
+#         test_input = ""
+#         if os.path.exists(test_case_path):
+#             with open(test_case_path, "r") as f:
+#                 test_data = json.load(f)
+#             public_tests = test_data.get("public_tests", [])
+#             if public_tests:
+#                 test_input = public_tests[0].get("input", "")
+#         tmp_file = None
+#         try:
+#             with tempfile.NamedTemporaryFile(mode='w+', suffix='.py', delete=False) as tmp:
+#                 tmp_file = tmp.name
+#                 tmp.write(code + "\n")
+#                 tmp.write(f"""
+# if __name__ == "__main__":
+#     import sys
+#     from io import StringIO
+    
+#     input_data = '''{test_input}'''
+#     sys.stdin = StringIO(input_data)
+    
+#     solve()
+# """)
+#                 tmp.flush()
+#             start_time = time.time()
+#             result = subprocess.run(
+#                 ["python", tmp_file],
+#                 capture_output=True,
+#                 text=True,
+#                 timeout=5
+#             )
+#             execution_time = round(time.time() - start_time, 3)
+#             if result.returncode != 0:
+#                 return {
+#                     "success": False,
+#                     "error": result.stderr or "Runtime error occurred",
+#                     "execution_time": execution_time
+#                 }
+#             return {
+#                 "success": True,
+#                 "output": result.stdout or "(No output)",
+#                 "execution_time": execution_time,
+#                 "test_input": test_input
+#             }
+#         finally:
+#             if tmp_file and os.path.exists(tmp_file):
+#                 try:
+#                     os.unlink(tmp_file)
+#                 except:
+#                     pass
+#     except subprocess.TimeoutExpired:
+#         return {"success": False, "error": "Execution timeout (5 seconds)"}
+#     except Exception as e:
+#         return {"success": False, "error": f"Execution error: {str(e)}"}
+
 @app.post("/api/run")
 async def run_code_api(request: dict):
-    """Run code without grading."""
+    """Run code with multiple public test cases without grading."""
     try:
         problem_id = request.get("problem_id")
         code = request.get("code")
+        
         if not problem_id or not code:
             return {"success": False, "error": "Missing problem_id or code"}
+        
+        # Load test cases
         test_case_path = os.path.join("test_cases", f"{problem_id}.json")
-        test_input = ""
-        if os.path.exists(test_case_path):
-            with open(test_case_path, "r") as f:
-                test_data = json.load(f)
-            public_tests = test_data.get("public_tests", [])
-            if public_tests:
-                test_input = public_tests[0].get("input", "")
-        tmp_file = None
-        try:
-            with tempfile.NamedTemporaryFile(mode='w+', suffix='.py', delete=False) as tmp:
-                tmp_file = tmp.name
-                tmp.write(code + "\n")
-                tmp.write(f"""
+        
+        if not os.path.exists(test_case_path):
+            return {"success": False, "error": "Test cases not found"}
+        
+        with open(test_case_path, "r") as f:
+            test_data = json.load(f)
+        
+        # Get all public test cases (limit to 4)
+        public_tests = test_data.get("public_tests", [])[:4]
+        
+        if not public_tests:
+            return {"success": False, "error": "No public test cases available"}
+        
+        # Run code against all public test cases
+        results = []
+        
+        for idx, test_case in enumerate(public_tests):
+            test_input = test_case.get("input", "")
+            expected_output = test_case.get("expected_output", "").strip()
+            
+            tmp_file = None
+            try:
+                # Create temporary file with the code
+                with tempfile.NamedTemporaryFile(mode='w+', suffix='.py', delete=False) as tmp:
+                    tmp_file = tmp.name
+                    tmp.write(code + "\n")
+                    tmp.write(f"""
 if __name__ == "__main__":
     import sys
     from io import StringIO
@@ -223,37 +303,92 @@ if __name__ == "__main__":
     
     solve()
 """)
-                tmp.flush()
-            start_time = time.time()
-            result = subprocess.run(
-                ["python", tmp_file],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
-            execution_time = round(time.time() - start_time, 3)
-            if result.returncode != 0:
-                return {
+                    tmp.flush()
+                
+                # Run the code
+                start_time = time.time()
+                result = subprocess.run(
+                    ["python", tmp_file],
+                    capture_output=True,
+                    text=True,
+                    timeout=5
+                )
+                execution_time = round(time.time() - start_time, 3)
+                
+                # Check if execution was successful
+                if result.returncode != 0:
+                    results.append({
+                        "test_number": idx + 1,
+                        "success": False,
+                        "error": result.stderr or "Runtime error occurred",
+                        "input": test_input,
+                        "expected_output": expected_output,
+                        "actual_output": None,
+                        "execution_time": execution_time,
+                        "passed": False
+                    })
+                else:
+                    actual_output = result.stdout.strip()
+                    
+                    # Check if output matches expected
+                    passed = actual_output.replace(" ", "") == expected_output.replace(" ", "")
+                    
+                    results.append({
+                        "test_number": idx + 1,
+                        "success": True,
+                        "input": test_input,
+                        "expected_output": expected_output,
+                        "actual_output": actual_output,
+                        "execution_time": execution_time,
+                        "passed": passed
+                    })
+                    
+            except subprocess.TimeoutExpired:
+                results.append({
+                    "test_number": idx + 1,
                     "success": False,
-                    "error": result.stderr or "Runtime error occurred",
-                    "execution_time": execution_time
-                }
-            return {
-                "success": True,
-                "output": result.stdout or "(No output)",
-                "execution_time": execution_time,
-                "test_input": test_input
+                    "error": "Execution timeout (5 seconds)",
+                    "input": test_input,
+                    "expected_output": expected_output,
+                    "actual_output": None,
+                    "execution_time": 5.0,
+                    "passed": False
+                })
+            except Exception as e:
+                results.append({
+                    "test_number": idx + 1,
+                    "success": False,
+                    "error": f"Execution error: {str(e)}",
+                    "input": test_input,
+                    "expected_output": expected_output,
+                    "actual_output": None,
+                    "execution_time": 0,
+                    "passed": False
+                })
+            finally:
+                # Clean up temporary file
+                if tmp_file and os.path.exists(tmp_file):
+                    try:
+                        os.unlink(tmp_file)
+                    except:
+                        pass
+        
+        # Calculate summary
+        passed_count = sum(1 for r in results if r.get("passed", False))
+        total_count = len(results)
+        
+        return {
+            "success": True,
+            "results": results,
+            "summary": {
+                "passed": passed_count,
+                "total": total_count,
+                "percentage": round((passed_count / total_count) * 100, 1) if total_count > 0 else 0
             }
-        finally:
-            if tmp_file and os.path.exists(tmp_file):
-                try:
-                    os.unlink(tmp_file)
-                except:
-                    pass
-    except subprocess.TimeoutExpired:
-        return {"success": False, "error": "Execution timeout (5 seconds)"}
+        }
+        
     except Exception as e:
-        return {"success": False, "error": f"Execution error: {str(e)}"}
+        return {"success": False, "error": f"Unexpected error: {str(e)}"}
 
 @app.get("/api/leaderboard")
 async def get_leaderboard_api():

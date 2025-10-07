@@ -977,22 +977,48 @@ function displayProblemDetails(problemData) {
 
 // Validate form and enable/disable submit button
 function validateForm() {
+  const username = elements.username.value.trim();
+  const problemId = elements.problemSelect.value;
   const code = getEditorCode().trim();
-  const isValid =
-    elements.username.value.trim() && elements.problemSelect.value && code;
+
+  console.log("Validating form:", {
+    hasUsername: !!username,
+    hasProblemId: !!problemId,
+    hasCode: !!code,
+    codeLength: code.length,
+  });
+
+  const isValid = username && problemId && code;
 
   elements.submitBtn.disabled = !isValid;
 
   if (isValid) {
     elements.submitBtn.classList.add("ready");
+    console.log("Form is valid - submit button enabled");
   } else {
     elements.submitBtn.classList.remove("ready");
+    console.log("Form is invalid - submit button disabled");
   }
+
+  return isValid;
 }
+
+// Add this debugging function to check CodeMirror state
+function debugCodeEditor() {
+  console.log("CodeMirror Debug Info:");
+  console.log("- Editor exists:", !!codeEditor);
+  console.log("- Code length:", getEditorCode().length);
+  console.log("- Code preview:", getEditorCode().substring(0, 100));
+  console.log("- Submit button disabled:", elements.submitBtn.disabled);
+}
+
+// Call this in browser console to debug: window.debugCodeEditor()
+window.debugCodeEditor = debugCodeEditor;
+window.validateForm = validateForm;
 
 // Run code without submitting
 async function runCode() {
-  const code = elements.codeEditor.value.trim();
+  const code = getEditorCode().trim();
   const problemId = elements.problemSelect.value;
 
   if (!code) {
@@ -1006,7 +1032,7 @@ async function runCode() {
   }
 
   try {
-    showLoading("Running your code...");
+    showLoading("Running your code with public test cases...");
 
     const response = await fetch(`${API_BASE}/api/run`, {
       method: "POST",
@@ -1032,26 +1058,106 @@ async function runCode() {
 
 // Display run results
 function displayRunResults(result) {
-  const runResultsHtml = `
-        <div class="result-card ${result.success ? "passed" : "failed"}">
-            <h4>${
-              result.success
-                ? "✅ Code Executed Successfully"
-                : "❌ Execution Failed"
-            }</h4>
-            <div class="result-details">
-                <strong>Output:</strong>
-                <pre style="background: rgba(248, 250, 252, 0.8); padding: 1rem; border-radius: 8px; margin-top: 0.5rem;">${escapeHtml(
-                  result.output || result.error || "No output"
-                )}</pre>
-                ${
-                  result.execution_time
-                    ? `<p><strong>Execution Time:</strong> ${result.execution_time}s</p>`
-                    : ""
-                }
-            </div>
+  if (!result.success) {
+    const errorHtml = `
+      <div class="result-card failed">
+        <h4>❌ Execution Failed</h4>
+        <div class="result-details">
+          <strong>Error:</strong>
+          <pre style="background: rgba(239, 68, 68, 0.1); padding: 1rem; border-radius: 8px; margin-top: 0.5rem; color: #dc2626;">${escapeHtml(
+            result.error || "Unknown error"
+          )}</pre>
         </div>
+      </div>
     `;
+    elements.resultsContent.innerHTML = errorHtml;
+    elements.resultsSection.classList.remove("hidden");
+    elements.resultsSection.scrollIntoView({ behavior: "smooth" });
+    return;
+  }
+
+  // Build HTML for multiple test results
+  const summary = result.summary;
+  const testResults = result.results || [];
+
+  let statusClass = "failed";
+  let statusIcon = "❌";
+
+  if (summary.passed === summary.total) {
+    statusClass = "passed";
+    statusIcon = "✅";
+  } else if (summary.passed > 0) {
+    statusClass = "partial";
+    statusIcon = "⚠️";
+  }
+
+  let runResultsHtml = `
+    <div class="result-card ${statusClass}">
+      <h4>${statusIcon} Test Results: ${summary.passed}/${summary.total} Passed (${summary.percentage}%)</h4>
+      <p style="margin: 0.5rem 0; color: #666;">Running against public test cases</p>
+    </div>
+  `;
+
+  // Add individual test case results
+  testResults.forEach((test) => {
+    const testClass = test.passed ? "passed" : "failed";
+    const testIcon = test.passed ? "✅" : "❌";
+
+    runResultsHtml += `
+      <div class="result-card ${testClass}" style="margin-top: 1rem;">
+        <h5>${testIcon} Test Case ${test.test_number}</h5>
+        
+        <div class="test-case-details" style="margin-top: 1rem;">
+          <div style="margin-bottom: 0.75rem;">
+            <strong>Input:</strong>
+            <pre style="background: rgba(248, 250, 252, 0.8); padding: 0.75rem; border-radius: 8px; margin-top: 0.25rem; font-size: 0.9rem;">${escapeHtml(
+              test.input || "(empty)"
+            )}</pre>
+          </div>
+          
+          ${
+            test.success
+              ? `
+            <div style="margin-bottom: 0.75rem;">
+              <strong>Expected Output:</strong>
+              <pre style="background: rgba(248, 250, 252, 0.8); padding: 0.75rem; border-radius: 8px; margin-top: 0.25rem; font-size: 0.9rem;">${escapeHtml(
+                test.expected_output
+              )}</pre>
+            </div>
+            
+            <div style="margin-bottom: 0.75rem;">
+              <strong>Your Output:</strong>
+              <pre style="background: ${
+                test.passed
+                  ? "rgba(16, 185, 129, 0.1)"
+                  : "rgba(239, 68, 68, 0.1)"
+              }; padding: 0.75rem; border-radius: 8px; margin-top: 0.25rem; font-size: 0.9rem;">${escapeHtml(
+                  test.actual_output || "(no output)"
+                )}</pre>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.5rem; background: rgba(248, 250, 252, 0.6); border-radius: 8px;">
+              <span><strong>Status:</strong> ${
+                test.passed
+                  ? '<span style="color: #10b981;">Passed ✓</span>'
+                  : '<span style="color: #ef4444;">Failed ✗</span>'
+              }</span>
+              <span><strong>Time:</strong> ${test.execution_time}s</span>
+            </div>
+          `
+              : `
+            <div style="margin-bottom: 0.75rem;">
+              <strong>Error:</strong>
+              <pre style="background: rgba(239, 68, 68, 0.1); padding: 0.75rem; border-radius: 8px; margin-top: 0.25rem; color: #dc2626; font-size: 0.9rem;">${escapeHtml(
+                test.error || "Unknown error"
+              )}</pre>
+            </div>
+          `
+          }
+        </div>
+      </div>
+    `;
+  });
 
   elements.resultsContent.innerHTML = runResultsHtml;
   elements.resultsSection.classList.remove("hidden");
@@ -1060,11 +1166,20 @@ function displayRunResults(result) {
 
 // Submit solution
 async function submitSolution() {
-  if (elements.submitBtn.disabled) return;
+  if (elements.submitBtn.disabled) {
+    console.log("Submit button is disabled");
+    return;
+  }
 
   const username = elements.username.value.trim();
   const problemId = elements.problemSelect.value;
-  const code = elements.codeEditor.value.trim();
+  const code = getEditorCode().trim();
+
+  console.log("Submitting solution:", {
+    username,
+    problemId,
+    codeLength: code.length,
+  });
 
   if (!username || !problemId || !code) {
     showError("Please fill in all fields before submitting.");
@@ -1075,10 +1190,13 @@ async function submitSolution() {
     showLoading("Evaluating your solution...");
     setSubmitButtonLoading(true);
 
+    console.log("Sending request to:", `${API_BASE}/api/submit`);
+
     const response = await fetch(`${API_BASE}/api/submit`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        Accept: "application/json",
       },
       body: JSON.stringify({
         user_id: username,
@@ -1087,11 +1205,17 @@ async function submitSolution() {
       }),
     });
 
+    console.log("Response status:", response.status);
+
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      const errorText = await response.text();
+      console.error("Error response:", errorText);
+      throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
     }
 
     const result = await response.json();
+    console.log("Result received:", result);
+
     hideLoading();
     setSubmitButtonLoading(false);
 
@@ -1107,7 +1231,7 @@ async function submitSolution() {
     hideLoading();
     setSubmitButtonLoading(false);
     showError(
-      "Failed to submit solution. Please check your code and try again."
+      `Failed to submit solution: ${error.message}. Please check the console for details.`
     );
   }
 }
